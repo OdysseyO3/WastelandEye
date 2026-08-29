@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PIP-OS v7.1.0.8</title>
+<style>
+  :root{
+    --amber: #1aff80;
+    --amber-dim: #0c7a3d;
+    --amber-glow: #33ff9c;
+    --bg: #04140a;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{
+    width:100%; height:100%;
+    background:#000;
+    overflow:hidden;
+    font-family: 'Courier New', monospace;
+  }
+  #frame{
+    position:relative;
+    width:100vw; height:100vh;
+    background:
+      radial-gradient(ellipse at center, #0a2412 0%, #030d06 75%, #000 100%);
+    display:flex; align-items:center; justify-content:center;
+  }
+  #housing{
+    position:relative;
+    width:min(96vw, 96vh*1.55);
+    height:min(96vh, 96vw/1.55);
+    background:#151a15;
+    border-radius:18px;
+    box-shadow:
+      inset 0 0 0 4px #0a0d0a,
+      inset 0 0 40px 10px #000,
+      0 0 60px rgba(0,0,0,0.8);
+    padding: 2.2%;
+  }
+  #screen{
+    position:relative;
+    width:100%; height:100%;
+    background:var(--bg);
+    border-radius:10px;
+    overflow:hidden;
+    box-shadow:
+      inset 0 0 60px 10px #000,
+      inset 0 0 12px 4px #000;
+  }
+  canvas{
+    position:absolute; top:0; left:0;
+    width:100%; height:100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  #glass{
+    position:absolute; inset:0;
+    pointer-events:none;
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0.18) 0px,
+        rgba(0,0,0,0.18) 1px,
+        transparent 2px,
+        transparent 3px
+      );
+    mix-blend-mode:multiply;
+  }
+  #vignette{
+    position:absolute; inset:0;
+    pointer-events:none;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.75) 100%);
+  }
+  #flicker{
+    position:absolute; inset:0;
+    pointer-events:none;
+    background: var(--amber-glow);
+    opacity:0;
+    animation: flick 6.5s infinite;
+  }
+  @keyframes flick{
+    0%,93%,100%{ opacity:0; }
+    93.3%{ opacity:0.05; }
+    94%{ opacity:0; }
+    95.5%{ opacity:0.08; }
+    96%{ opacity:0; }
+  }
+  #ui{
+    position:absolute; inset:0;
+    color:var(--amber);
+    text-shadow: 0 0 4px var(--amber-glow), 0 0 10px rgba(26,255,128,0.35);
+    display:flex; flex-direction:column;
+    padding: 1.6% 2.2%;
+    letter-spacing: 1px;
+    user-select:none;
+  }
+  #topbar{
+    display:flex; justify-content:space-between; align-items:center;
+    font-size: clamp(10px, 1.5vw, 16px);
+    border-bottom: 2px solid var(--amber-dim);
+    padding-bottom: 0.6%;
+    margin-bottom: 0.8%;
+    gap: 2%;
+  }
+  .brand{ white-space:nowrap; }
+  #urlForm{
+    flex:1;
+    display:flex; align-items:center; gap:6px;
+    min-width:0;
+  }
+  .proto{ opacity:0.65; white-space:nowrap; font-size:0.85em; }
+  #urlInput{
+    flex:1; min-width:0;
+    background: rgba(26,255,128,0.06);
+    border: 1px solid var(--amber-dim);
+    color: var(--amber);
+    font-family: inherit;
+    font-size: 0.9em;
+    text-shadow: 0 0 4px var(--amber-glow);
+    padding: 3px 6px;
+    outline:none;
+    letter-spacing:0.5px;
+  }
+  #urlInput::placeholder{ color: var(--amber-dim); opacity:0.8; }
+  #urlInput:focus{
+    border-color: var(--amber);
+    box-shadow: 0 0 6px rgba(26,255,128,0.4);
+  }
+  #urlForm button{
+    background: transparent;
+    border: 1px solid var(--amber);
+    color: var(--amber);
+    font-family: inherit;
+    font-size: 0.85em;
+    padding: 3px 10px;
+    cursor:pointer;
+    white-space:nowrap;
+    text-shadow: 0 0 4px var(--amber-glow);
+  }
+  #urlForm button:hover{ background: rgba(26,255,128,0.12); }
+  #urlForm button:active{ background: rgba(26,255,128,0.25); }
+  #tabs{
+    display:flex; gap: clamp(8px, 2vw, 22px);
+    font-size: clamp(11px, 1.7vw, 18px);
+    margin-bottom: 1%;
+  }
+  .tab{
+    padding: 2px 10px;
+    border: 1px solid transparent;
+    cursor:pointer;
+    opacity:0.55;
+  }
+  .tab.active{
+    opacity:1;
+    border: 1px solid var(--amber);
+    background: rgba(26,255,128,0.08);
+  }
+  #body{
+    flex:1;
+    min-height:0;
+    display:flex;
+  }
+  #workarea{
+    flex:1;
+    min-height:0;
+    border: 2px solid var(--amber);
+    box-shadow:
+      0 0 10px rgba(26,255,128,0.5),
+      inset 0 0 18px rgba(26,255,128,0.12);
+    display:flex; align-items:center; justify-content:center;
+    position:relative;
+    overflow:hidden;
+  }
+  #workarea.has-frame{
+    display:block;
+  }
+  #workarea iframe{
+    display:block;
+    width:100%; height:100%; border:0;
+    filter: grayscale(1) brightness(0.85) contrast(1.4) sepia(1) hue-rotate(65deg) saturate(5);
+    background:#04140a;
+  }
+  #workarea::before{
+    content:"";
+    position:absolute; inset:6px;
+    border: 1px dashed var(--amber-dim);
+    pointer-events:none;
+  }
+  #waitingText{
+    font-size: clamp(14px, 2.6vw, 30px);
+    letter-spacing: 2px;
+    animation: textBlink 1.2s steps(1) infinite;
+  }
+  @keyframes textBlink{ 50%{ opacity:0.15; } }
+  #statusFooter{
+    display:flex; justify-content:space-between;
+    font-size: clamp(9px,1.2vw,13px);
+    opacity:0.8;
+    margin-top: 1%;
+    border-top: 2px solid var(--amber-dim);
+    padding-top: 0.6%;
+  }
+  #cursor{ display:inline-block; width:0.6em; background:var(--amber); animation: blink 1s steps(1) infinite; }
+  @keyframes blink{ 50%{ opacity:0; } }
+</style>
+</head>
+<body>
+<div id="frame">
+  <div id="housing">
+    <div id="screen">
+      <canvas id="fx"></canvas>
+      <div id="ui">
+        <div id="topbar">
+          <span class="brand">PIP-OS(R)</span>
+          <form id="urlForm" autocomplete="off">
+            <span class="proto">URL://</span>
+            <input id="urlInput" type="text" placeholder="enter address..." spellcheck="false" />
+            <button type="submit">CONNECT</button>
+          </form>
+          <span id="clock">00:00:00</span>
+        </div>
+        <div id="tabs">
+          <div class="tab active" data-tab="stat">STAT</div>
+          <div class="tab" data-tab="inv">INV</div>
+          <div class="tab" data-tab="data">DATA</div>
+          <div class="tab" data-tab="map">MAP</div>
+          <div class="tab" data-tab="radio">RADIO</div>
+        </div>
+        <div id="body">
+          <div id="workarea">
+            <span id="waitingText">Waiting for the connection<span id="dots">...</span></span>
+          </div>
+        </div>
+        <div id="statusFooter">
+          <span>RAD: <span id="radVal">0</span> rads</span>
+          <span>SIGNAL LOCK<span id="cursor">_</span></span>
+          <span id="coords">SECTOR --</span>
+        </div>
+      </div>
+      <div id="glass"></div>
+      <div id="vignette"></div>
+      <div id="flicker"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===================== PIP-BOY PROCEDURAL SCREEN =====================
+   Everything pixel-based is drawn on low-res canvases upscaled with
+   image-rendering:pixelated, for an authentic chunky CRT-pixel look.
+   This file is meant to be a drop-in shell: hook your minigame logic
+   into drawSprite()/mapCanvas/stat bars below.
+======================================================================= */
+
+const AMBER = "#1aff80";
+const AMBER_DIM = "#0c7a3d";
+
+// ---------- utility: low-res pixel canvas helper ----------
+function setupPixelCanvas(canvas, pxWidth, pxHeight){
+  canvas.width = pxWidth;
+  canvas.height = pxHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  return ctx;
+}
+
+// ---------- background static/noise + scanline shimmer on #fx ----------
+const fx = document.getElementById("fx");
+const screenEl = document.getElementById("screen");
+let fxCtx;
+function resizeFx(){
+  const r = screenEl.getBoundingClientRect();
+  fxCtx = setupPixelCanvas(fx, Math.floor(r.width/3), Math.floor(r.height/3));
+}
+resizeFx();
+window.addEventListener("resize", resizeFx);
+
+function drawStatic(){
+  const w = fx.width, h = fx.height;
+  const img = fxCtx.createImageData(w,h);
+  for(let i=0;i<img.data.length;i+=4){
+    const on = Math.random() < 0.025;
+    const v = on ? 60 + Math.random()*40 : 0;
+    img.data[i]   = 10;
+    img.data[i+1] = 20 + v;
+    img.data[i+2] = 10;
+    img.data[i+3] = on ? 40 : 0;
+  }
+  fxCtx.putImageData(img,0,0);
+}
+
+// ---------- URL "connect" flow ----------
+// On submit, this plays a boot sequence in #workarea. The actual adapted
+// page content isn't fetched client-side (most sites block cross-origin
+// reads, and this is a single offline file) — instead, paste the URL to
+// Claude in chat and it will fetch + hand-adapt that page's content into
+// #workarea to match this terminal's style.
+const urlForm = document.getElementById("urlForm");
+const urlInput = document.getElementById("urlInput");
+const workarea = document.getElementById("workarea");
+
+function setWorkareaContent(html){
+  workarea.innerHTML = html;
+}
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function normalizeUrl(raw){
+  let u = raw.trim();
+  if(!/^https?:\/\//i.test(u)) u = "https://" + u;
+  return u;
+}
+
+function showConnectionError(target){
+  workarea.classList.remove("has-frame");
+  setWorkareaContent(`
+    <div style="padding:5%; font-size:clamp(11px,1.5vw,15px); line-height:1.8; align-self:flex-start;">
+      &gt; CONNECTION REFUSED<br>
+      &gt; TARGET: ${escapeHtml(target)}<br><br>
+      Remote host blocks embedded display (frame-ancestors / X-Frame-Options) —
+      this is the site's own security policy, not something an embed can
+      bypass.<br><br>
+      <button id="retryBtn" style="background:transparent;border:1px solid var(--amber);color:var(--amber);font-family:inherit;font-size:0.9em;padding:4px 12px;cursor:pointer;margin-right:8px;">RETRY</button>
+      <button id="openTabBtn" style="background:transparent;border:1px solid var(--amber);color:var(--amber);font-family:inherit;font-size:0.9em;padding:4px 12px;cursor:pointer;">OPEN IN NEW TAB</button>
+      <br><br>
+      <span style="opacity:0.7; font-size:0.85em;">Or paste this address in chat — Claude will fetch the page and hand-adapt its actual content to render here instead.</span>
+    </div>
+  `);
+  document.getElementById("retryBtn").addEventListener("click", ()=> playConnectSequence(target));
+  document.getElementById("openTabBtn").addEventListener("click", ()=> window.open(target, "_blank", "noopener"));
+}
+
+function attemptRender(rawUrl){
+  const target = normalizeUrl(rawUrl);
+  const iframe = document.createElement("iframe");
+  let settled = false;
+
+  function checkBlocked(){
+    if(settled) return;
+    // Cross-origin pages throw on contentDocument access — that SecurityError
+    // is actually the *good* sign (real foreign page loaded). If access
+    // succeeds without throwing, the browser silently swapped in a blank/
+    // same-origin error page, which means the embed was refused.
+    let blocked = false;
+    try{
+      const doc = iframe.contentWindow.document;
+      if(!doc || doc.location.href === "about:blank" || (doc.body && doc.body.innerHTML.trim() === "")){
+        blocked = true;
+      }
+    }catch(err){
+      blocked = false; // SecurityError => real cross-origin content loaded
+    }
+    settled = true;
+    if(blocked) showConnectionError(target);
+  }
+
+  const failTimer = setTimeout(()=>{
+    if(!settled){ settled = true; showConnectionError(target); }
+  }, 4000);
+
+  iframe.addEventListener("load", ()=>{
+    clearTimeout(failTimer);
+    // small delay: some browsers swap in the blocked/blank page a tick
+    // after the load event fires
+    setTimeout(checkBlocked, 150);
+  });
+  iframe.addEventListener("error", ()=>{
+    if(settled) return;
+    settled = true;
+    clearTimeout(failTimer);
+    showConnectionError(target);
+  });
+
+  iframe.src = target;
+  setWorkareaContent("");
+  workarea.classList.add("has-frame");
+  workarea.appendChild(iframe);
+}
+
+function playConnectSequence(url){
+  workarea.classList.remove("has-frame");
+  const lines = [
+    "INITIALIZING UPLINK...",
+    `RESOLVING ${url.toUpperCase()}...`,
+    "NEGOTIATING HANDSHAKE...",
+    "RECEIVING SIGNAL",
+  ];
+  setWorkareaContent(`<div id="bootlog"></div>`);
+  const bootlog = document.getElementById("bootlog");
+  bootlog.style.cssText = "font-size:clamp(11px,1.6vw,16px); line-height:1.9; align-self:flex-start; width:100%; padding:4%;";
+  let i = 0;
+  const step = () => {
+    if(i < lines.length){
+      const row = document.createElement("div");
+      row.textContent = "> " + lines[i];
+      bootlog.appendChild(row);
+      i++;
+      setTimeout(step, 420 + Math.random()*280);
+    } else {
+      attemptRender(url);
+    }
+  };
+  step();
+}
+
+urlForm.addEventListener("submit", (e)=>{
+  e.preventDefault();
+  const url = urlInput.value.trim();
+  if(!url) return;
+  playConnectSequence(url);
+});
+
+
+function tickReadouts(){
+  const now = new Date();
+  document.getElementById("clock").textContent = now.toTimeString().slice(0,8);
+  document.getElementById("radVal").textContent = (Math.random()*3).toFixed(1);
+}
+
+// ---------- animated dots wherever #dots currently exists ----------
+setInterval(()=>{
+  const dotsEl = document.getElementById("dots");
+  if(!dotsEl) return;
+  const n = (dotsEl.textContent.length % 3) + 1;
+  dotsEl.textContent = ".".repeat(n);
+}, 500);
+
+// ---------- tab switching (hook for page routing — wire your minigame's
+// per-tab content into this handler) ----------
+document.querySelectorAll(".tab").forEach(tab=>{
+  tab.addEventListener("click", ()=>{
+    document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+    tab.classList.add("active");
+    // TODO: swap #workarea content based on tab.dataset.tab
+  });
+});
+
+// ---------- animation loop ----------
+function loop(){
+  drawStatic();
+  tickReadouts();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
