@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Wasteland Terminal — Full Page Green Renderer</title>
+<style>
+  html,body{
+    margin:0;width:100%;height:100%;overflow:hidden;background:#070b08;
+    font-family:monospace;
+  }
+
+  #c{
+    position:fixed;inset:0;z-index:1;
+    width:100vw;height:100vh;
+    image-rendering:pixelated;
+    image-rendering:crisp-edges;
+  }
+
+  #urlForm{
+    position:fixed;z-index:6;
+    display:flex;gap:6px;
+    box-sizing:border-box;
+  }
+
+  #urlInput{
+    flex:1;min-width:0;height:100%;
+    box-sizing:border-box;
+    border:0;outline:none;
+    background:#061008;color:#b6ff9e;
+    font-family:monospace;font-weight:bold;
+    padding:0 8px;caret-color:#b6ff9e;
+    box-shadow:inset 0 0 0 1px #2a7b38;
+  }
+
+  #urlInput::placeholder{color:#2a7b38;opacity:1;}
+
+  #goBtn{
+    height:100%;min-width:48px;border:0;
+    background:#12341b;color:#b6ff9e;
+    font-family:monospace;font-weight:bold;cursor:pointer;
+    box-shadow:inset 0 0 0 1px #45d85a;
+  }
+
+  #viewport{
+    position:fixed;z-index:3;
+    overflow:hidden;
+    background:#020503;
+    box-sizing:border-box;
+  }
+
+  #webFrame{
+    display:block;
+    width:100%;height:100%;
+    border:0;background:white;
+    transform:translateZ(0);
+    filter:
+      grayscale(1)
+      sepia(1)
+      saturate(6)
+      hue-rotate(65deg)
+      brightness(.66)
+      contrast(1.38);
+  }
+
+  #greenOverlay{
+    position:absolute;inset:0;z-index:3;pointer-events:none;
+    background:
+      linear-gradient(rgba(0,55,0,.18),rgba(0,55,0,.18)),
+      repeating-linear-gradient(
+        to bottom,
+        rgba(255,255,255,.015) 0px,
+        rgba(255,255,255,.015) 1px,
+        rgba(0,0,0,.12) 2px,
+        rgba(0,0,0,.12) 3px
+      );
+    mix-blend-mode:multiply;
+  }
+
+  #phosphor{
+    position:absolute;inset:0;z-index:4;pointer-events:none;
+    box-shadow:
+      inset 0 0 22px rgba(69,216,90,.28),
+      inset 0 0 5px rgba(182,255,158,.35);
+  }
+
+  #status{
+    position:absolute;inset:0;z-index:2;
+    display:flex;align-items:center;justify-content:center;
+    flex-direction:column;
+    background:#020503;color:#7cff73;
+    font-family:monospace;font-weight:bold;
+    text-align:center;padding:20px;box-sizing:border-box;
+  }
+  #status.hidden{display:none;}
+  #status .main{font-size:clamp(12px,1.5vw,18px);}
+  #status .sub{margin-top:10px;color:#2a7b38;font-size:clamp(8px,1vw,11px);}
+
+  #hint{
+    position:absolute;left:8px;right:8px;bottom:6px;z-index:5;
+    text-align:center;font-size:10px;color:#2a7b38;
+    pointer-events:none;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<form id="urlForm">
+  <input id="urlInput" spellcheck="false" autocomplete="off" inputmode="url"
+         placeholder="PASTE OR TYPE URL — https://example.com" />
+  <button id="goBtn" type="submit">OPEN</button>
+</form>
+
+<div id="viewport">
+  <div id="status">
+    <div class="main">WAITING FOR THE CONNECTION...</div>
+    <div class="sub">FULL PAGE GREEN RENDERER</div>
+  </div>
+
+  <iframe id="webFrame"
+    referrerpolicy="no-referrer"
+    sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin">
+  </iframe>
+
+  <div id="greenOverlay"></div>
+  <div id="phosphor"></div>
+  <div id="hint"></div>
+</div>
+
+<script>
+(() => {
+  const canvas=document.getElementById('c');
+  const ctx=canvas.getContext('2d',{alpha:false});
+  const urlForm=document.getElementById('urlForm');
+  const urlInput=document.getElementById('urlInput');
+  const viewport=document.getElementById('viewport');
+  const webFrame=document.getElementById('webFrame');
+  const status=document.getElementById('status');
+  const hint=document.getElementById('hint');
+
+  const W=480,H=270;
+  const buf=document.createElement('canvas');
+  buf.width=W;buf.height=H;
+  const g=buf.getContext('2d',{alpha:false});
+  g.imageSmoothingEnabled=false;
+
+  const COL={
+    shell0:'#11140f',shell1:'#363729',shell2:'#20251b',
+    mid:'#12341b',green:'#7cff73',green2:'#45d85a',
+    dim:'#2a7b38',pale:'#b6ff9e',black:'#020503'
+  };
+
+  let t=0,seed=(Date.now()^0xA51CE55)>>>0;
+
+  function rnd(){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return(seed>>>0)/4294967296;}
+  function px(x,y,w,h,c){g.fillStyle=c;g.fillRect(x|0,y|0,w|0,h|0);}
+  function line(x1,y1,x2,y2,c){g.strokeStyle=c;g.lineWidth=1;g.beginPath();g.moveTo((x1|0)+.5,(y1|0)+.5);g.lineTo((x2|0)+.5,(y2|0)+.5);g.stroke();}
+  function txt(s,x,y,size=8,c=COL.green,align='left'){g.fillStyle=c;g.font=`bold ${size}px monospace`;g.textAlign=align;g.textBaseline='top';g.fillText(s,x|0,y|0);}
+  function frame(x,y,w,h,c=COL.mid){px(x,y,w,h,c);px(x+2,y+2,w-4,h-4,COL.black);}
+
+  function drawCase(){
+    px(0,0,W,H,COL.shell0);px(4,4,W-8,H-8,COL.shell1);
+    px(8,8,W-16,H-16,COL.shell2);px(13,13,W-26,H-26,'#0b110c');
+    for(let i=0;i<8;i++){
+      const y=24+i*27;
+      px(2,y,8,13,i%2?'#4a4936':'#2e3225');
+      px(W-10,y+((i%3)-1),8,11,i%2?'#2e3225':'#4a4936');
+    }
+    [[17,17],[W-18,17],[17,H-18],[W-18,H-18]].forEach(([x,y])=>{
+      px(x-2,y-2,5,5,'#77765b');px(x-1,y,3,1,'#22251d');
+    });
+  }
+
+  function drawTop(){
+    txt('FIELD TERMINAL // REMOTE PAGE',28,18,9,COL.pale);
+    txt('FULL VIEW',452,19,6,COL.dim,'right');
+    frame(27,34,426,22);
+  }
+
+  function drawWorkBorder(){
+    const x=27,y=64,w=426,h=133;
+    px(x,y,w,h,COL.green2);
+    px(x+2,y+2,w-4,h-4,COL.mid);
+    px(x+4,y+4,w-8,h-8,COL.black);
+    txt('REMOTE PAGE BUFFER',35,65,6,COL.dim);
+    txt('PHOSPHOR FILTER: ACTIVE',445,65,6,COL.dim,'right');
+  }
+
+  function miniFrame(x,y,w,h,title){
+    frame(x,y,w,h);
+    txt(title,x+5,y+3,6,COL.dim);
+    line(x+4,y+11,x+w-5,y+11,COL.mid);
+  }
+
+  function drawMiniPerson(x,y,w,h){
+    miniFrame(x,y,w,h,'BIO');
+    const cx=x+w/2,cy=y+29,c=COL.green2;
+    px(cx-2,cy-10,5,5,c);px(cx-5,cy-4,11,10,c);
+    px(cx-8,cy-3,3,10,c);px(cx+6,cy-3,3,10,c);
+    px(cx-4,cy+6,3,10,c);px(cx+2,cy+6,3,10,c);
+    txt('HP 82',x+5,y+h-11,6,COL.green);
+    txt('OK',x+w-5,y+h-11,6,COL.pale,'right');
+  }
+
+  function drawMiniScanner(x,y,w,h){
+    miniFrame(x,y,w,h,'SCAN');
+    const gx=x+6,gy=y+15,gw=w-12,gh=h-27;
+    for(let xx=gx;xx<gx+gw;xx+=8)line(xx,gy,xx,gy+gh,COL.mid);
+    for(let yy=gy;yy<gy+gh;yy+=7)line(gx,yy,gx+gw,yy,COL.mid);
+    const cx=gx+gw/2,cy=gy+gh/2;
+    line(cx-3,cy,cx+3,cy,COL.pale);line(cx,cy-3,cx,cy+3,COL.pale);
+    const sweep=(t*24)%(gw-8);px(gx+4+sweep,gy+3,2,2,COL.green);
+    txt('2 SIG',x+w-5,y+h-11,6,COL.green,'right');
+  }
+
+  function drawMiniDevice(x,y,w,h){
+    miniFrame(x,y,w,h,'BUS');
+    txt('PWR',x+5,y+16,6,COL.dim);txt('87%',x+w-5,y+16,7,COL.pale,'right');
+    const bx=x+6,by=y+28,bw=w-12;
+    frame(bx,by,bw,8);
+    px(bx+2,by+2,Math.floor((bw-4)*.87),4,COL.green2);
+  }
+
+  function drawMiniWave(x,y,w,h){
+    miniFrame(x,y,w,h,'SIGNAL');
+    const yy=y+34;
+    line(x+6,yy,x+w-7,yy,COL.mid);
+    for(let i=0;i<w-18;i++){
+      const xx=x+8+i;
+      const amp=Math.sin(i*.42+t*4)*4+Math.sin(i*.13+t)*2;
+      if(i%2===0)px(xx,yy+Math.round(amp),1,1,COL.green2);
+    }
+    txt('WEB RX',x+5,y+h-11,6,COL.dim);
+  }
+
+  function drawBottom(){
+    const y=205,h=44;
+    drawMiniPerson(27,y,92,h);
+    drawMiniScanner(125,y,104,h);
+    drawMiniDevice(235,y,104,h);
+    drawMiniWave(345,y,108,h);
+  }
+
+  function scanlines(){
+    g.globalAlpha=.14;
+    for(let y=0;y<H;y+=3)px(0,y,W,1,'#000');
+    g.globalAlpha=1;
+  }
+
+  function resize(){
+    canvas.width=Math.floor(innerWidth*devicePixelRatio);
+    canvas.height=Math.floor(innerHeight*devicePixelRatio);
+    ctx.imageSmoothingEnabled=false;
+
+    const scale=Math.min(innerWidth/W,innerHeight/H);
+    const ox=(innerWidth-W*scale)/2;
+    const oy=(innerHeight-H*scale)/2;
+
+    Object.assign(urlForm.style,{
+      left:(ox+31*scale)+'px',
+      top:(oy+37*scale)+'px',
+      width:(418*scale)+'px',
+      height:(16*scale)+'px'
+    });
+
+    urlInput.style.fontSize=Math.max(8,7*scale)+'px';
+    document.getElementById('goBtn').style.fontSize=Math.max(8,6*scale)+'px';
+
+    const box={
+      left:(ox+31*scale)+'px',
+      top:(oy+68*scale)+'px',
+      width:(418*scale)+'px',
+      height:(125*scale)+'px'
+    };
+    Object.assign(viewport.style,box);
+  }
+
+  addEventListener('resize',resize);
+  resize();
+
+  function normalizeUrl(v){
+    v=v.trim();
+    if(!v)return'';
+    if(!/^https?:\/\//i.test(v))v='https://'+v;
+    return v;
+  }
+
+  function openUrl(){
+    const url=normalizeUrl(urlInput.value);
+    if(!url)return;
+
+    urlInput.value=url;
+    status.classList.remove('hidden');
+    status.querySelector('.main').textContent='CONNECTING...';
+    status.querySelector('.sub').textContent=url;
+    hint.textContent='';
+
+    webFrame.src=url;
+
+    // show page as soon as navigation starts
+    setTimeout(()=>status.classList.add('hidden'),250);
+
+    webFrame.onload=()=>{
+      status.classList.add('hidden');
+      hint.textContent='REMOTE PAGE // GREEN VISUAL MODE';
+    };
+
+    setTimeout(()=>{
+      hint.textContent='REMOTE PAGE // IF BLANK, TARGET SITE BLOCKS IFRAME EMBEDDING';
+    },2500);
+  }
+
+  urlForm.addEventListener('submit',e=>{
+    e.preventDefault();
+    openUrl();
+  });
+
+  function render(){
+    t+=1/60;
+    g.fillStyle=COL.black;g.fillRect(0,0,W,H);
+    drawCase();drawTop();drawWorkBorder();drawBottom();scanlines();
+
+    ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
+    const scale=Math.min(canvas.width/W,canvas.height/H);
+    const dw=Math.floor(W*scale),dh=Math.floor(H*scale);
+    const ox=Math.floor((canvas.width-dw)/2),oy=Math.floor((canvas.height-dh)/2);
+
+    ctx.globalAlpha=.18;
+    ctx.drawImage(buf,ox-2,oy,dw+4,dh);
+    ctx.globalAlpha=1;
+    ctx.drawImage(buf,ox,oy,dw,dh);
+
+    requestAnimationFrame(render);
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
